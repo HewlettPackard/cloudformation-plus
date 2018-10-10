@@ -141,7 +141,7 @@ def main():
     cfnp_result.do_after_creation()
 ```
 
-Let's go over these changes.  All CloudFormation Plus features used in my_website.yml are processed by the call to `cfnplus.process_template`.  (The parameters for this function are described below.)  As you will learn when you read the sections below, some features generate template code, some features generate S3 actions that are to be done before stack creation/update, and some features generate S3 actions that are to be done after stack creation/update.  The return value of `cfnplus.process_template` contains the accumulated results of each feature in `my_website.yml`.  It is important to note that `cfnplus.process_template` does not perform any S3 actions --- in fact, it has no side-effets.
+Let's go over these changes.  All CloudFormation Plus features used in my_website.yml are processed by the call to `cfnplus.process_template`.  (The parameters for this function are described below.)  As you will learn when you read the sections below, some features generate template code, some features generate S3 actions that are to be done before stack creation/update, and some features generate S3 actions that are to be done after stack creation/update.  The return value of `cfnplus.process_template` contains the accumulated results of each feature in `my_website.yml`.  It is important to note that `cfnplus.process_template` does not perform any S3 actions &mdash; in fact, it has no side-effets.
 
 We next put the return value (`cfnp_result`) in a `with` statement, and do the rest of the work in the body of this statement.  The purpose of the `with` statement is to support atomicity; if an exception is thrown in the `do_before_creation` call or in any statement after this call and before the `do_after_creation` call, the effects of the actions done by the `do_before_creation` call will be rolled back &mdash; for example, objects added to S3 will be removed, objects removed from S3 will be restored.  Similarly, if an exception is thrown by the `do_after_creation` call, the effects of any actions done by this call will be rolled back &mdash; but the effects of the `do_before_creation` call will NOT be rolled back.
 
@@ -150,8 +150,7 @@ The most likely cause of exceptions will be problems with the original (non-tran
 ### Signature of `process_template`
 
 ```
-def process_template(template, template_params, aws_region, \
-    template_path=None, stack_name=None)
+def process_template(template, template_params, aws_region, template_path=None, stack_name=None)
 ```
 
 <table>
@@ -170,15 +169,14 @@ def process_template(template, template_params, aws_region, \
 <td>template_params</td>
 <td>dict</td>
 <td>A list of dicts of this form:
-<code><pre>
+<pre><code>
 {
     "ParameterKey": ...,
     "ParameterValue": ..., (optional)
     "UsePreviousValue": ... (optional)
-}
-</pre></code>
+}</code></pre>
 
-If `UsePreviousValue` is True for any of them, then the `stack_name` parameter must be
+If `UsePreviousValue` is `True` for any of them, then the `stack_name` parameter must be
   given and a stack with that name must exist.
 </td>
 </tr>
@@ -202,9 +200,9 @@ If `UsePreviousValue` is True for any of them, then the `stack_name` parameter m
 <td>stack_name</td>
 <td>str</td>
 <td>The name that the stack will have when it is
-  made.  This is needed only if the template uses the `AWS::StackName`
-  variable, or if `template_params` contains an item with `UsePreviousValue`
-  set to `True`, or if `Aruba::StackPolicy` is used.</td>
+  made.  This is needed only if the template uses the <code>AWS::StackName</code>
+  variable, or if <code>template_params</code> contains an item with <code>UsePreviousValue</code>
+  set to <code>True</code>, or if <code>Aruba::StackPolicy</code> is used.</td>
 </tr>
 
 </tbody>
