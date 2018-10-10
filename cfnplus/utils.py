@@ -36,6 +36,8 @@ import botocore
 
 base_str = (str, unicode)
 
+FILE_HASH_ALG = 'sha1'
+
 class InvalidTemplate(Exception):
     pass
 

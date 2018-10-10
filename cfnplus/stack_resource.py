@@ -106,8 +106,9 @@ def evaluate(resource, ctx):
         result = utils.Result(new_template=new_template_str)
 
     # make S3 key
-    h = hashlib.sha224(result.new_template).hexdigest()
-    s3_key = '{}/{}'.format(s3_dir_key, h)
+    h = hashlib.new(utils.FILE_HASH_ALG)
+    h.update(result.new_template)
+    s3_key = '{}/{}'.format(s3_dir_key, h.hexdigest())
 
     def upload_action(undoers, committers):
         buf = cStringIO.StringIO()

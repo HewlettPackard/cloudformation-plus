@@ -62,7 +62,7 @@ class _LambdaPkgMaker(object):
 
     @property
     def hash(self):
-        h = hashlib.sha224()
+        h = hashlib.new(utils.FILE_HASH_ALG)
         for pkg_path, local_path in self._entries.items():
             h.update(struct.pack('>Q', len(pkg_path))) # path_in_zipfile_len
             h.update(pkg_path) # path_in_zipfile

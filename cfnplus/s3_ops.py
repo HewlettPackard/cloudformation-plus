@@ -29,6 +29,7 @@
 import hashlib
 import base64
 import botocore
+from . import utils
 
 def upload_file(f, bucket, key, undoers, committers):
     # If there's no existing object:
@@ -46,10 +47,10 @@ def upload_file(f, bucket, key, undoers, committers):
     #    Undo: nop
     #    Commit: nop
 
-    HASH_METADATA_KEY = 'sha224sum'
+    HASH_METADATA_KEY = '{}_sum'.format(utils.FILE_HASH_ALG)
 
     # get file's hash
-    h = hashlib.sha224()
+    h = hashlib.new(utils.FILE_HASH_ALG)
     while True:
         buf = f.read(1024)
         if len(buf) == 0:
