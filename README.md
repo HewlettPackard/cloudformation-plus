@@ -106,7 +106,7 @@ if __name__ == '__main__':
 Now, suppose that we change my_website.yml to use CloudFormation Plus template language extensions.  We must now change our program so that it uses the CloudFormation Plus library to process the template before passing it to CloudFormation.  First, we add the import:
 
 ```
-import cfn_plus
+import cfnplus
 ```
 
 Next, we change `main`:
@@ -120,7 +120,7 @@ def main():
     template = f.read()
 
   # process language extensions
-  cfnp_result = cfn_plus.process_template(
+  cfnp_result = cfnplus.process_template(
     template,
     [], # template params
     _AWS_REGION,
@@ -141,7 +141,7 @@ def main():
     cfnp_result.do_after_creation()
 ```
 
-Let's go over these changes.  All CloudFormation Plus features used in my_website.yml are processed by the call to `cfn_plus.process_template`.  (The parameters for this function are described below.)  As you will learn when you read the sections below, some features generate template code, some features generate S3 actions that are to be done before stack creation/update, and some features generate S3 actions that are to be done after stack creation/update.  The return value of `cfn_plus.process_template` contains the accumulated results of each feature in `my_website.yml`.  It is important to note that `cfn_plus.process_template` does not perform any S3 actions --- in fact, it has no side-effets.
+Let's go over these changes.  All CloudFormation Plus features used in my_website.yml are processed by the call to `cfnplus.process_template`.  (The parameters for this function are described below.)  As you will learn when you read the sections below, some features generate template code, some features generate S3 actions that are to be done before stack creation/update, and some features generate S3 actions that are to be done after stack creation/update.  The return value of `cfnplus.process_template` contains the accumulated results of each feature in `my_website.yml`.  It is important to note that `cfnplus.process_template` does not perform any S3 actions --- in fact, it has no side-effets.
 
 We next put the return value (`cfnp_result`) in a `with` statement, and do the rest of the work in the body of this statement.  The purpose of the `with` statement is to support atomicity; if an exception is thrown in the `do_before_creation` call or in any statement after this call and before the `do_after_creation` call, the effects of the actions done by the `do_before_creation` call will be rolled back &mdash; for example, objects added to S3 will be removed, objects removed from S3 will be restored.  Similarly, if an exception is thrown by the `do_after_creation` call, the effects of any actions done by this call will be rolled back &mdash; but the effects of the `do_before_creation` call will NOT be rolled back.
 
