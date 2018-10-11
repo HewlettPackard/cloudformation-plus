@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  Bucket:
+    Type: String
+
+Resources:
+  ApiLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Aruba::LambdaCode:
+        LocalPath: lambda/api
+        S3Dest: {'Fn::Sub': 's3://${Bucket}/lambda'}
+      Environment:
+        Variables:
+          DB_HOST: {'Fn::Sub': 'Database.PublicDnsName'}
+      Handler: api.handle
+      Runtime: python2.7
+      Role: {'Fn::Sub': '${LambdaRole.Arn}'}
+
+  LambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'

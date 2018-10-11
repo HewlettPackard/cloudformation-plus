@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  Bucket:
+    Type: String
+  BucketArn:
+    Type: String
+
+Metadata:
+  Aruba::BeforeCreation:
+    - S3Upload:
+        LocalFile: bootstrap/db.sh
+        S3Dest: {'Fn::Sub': 's3://${Bucket}/bootstrap/db.sh'}
+
+  Aruba::AfterCreation:
+    - S3Sync:
+        LocalDir: data
+        S3Dest: {'Fn::Sub': 's3://${Bucket}/data'}
+    - S3Mkdir: {'Fn::Sub': 's3://${Bucket}/my-dir'}
+
+  DatabaseRolePolicy: &database-role-policy
+    Version: 2012-10-17
+    Statement:
+      - Effect: Allow
+        Action: 's3:HeadBucket'
+        Resource: '*'
+      - Effect: Allow
+        Action: 's3:ListBucket'
+        Resource: {Ref: BucketArn}
+      - Effect: Allow
+        Action:
+          - 's3:GetObject'
+        Resource: {'Fn::Sub': '${BucketArn}/*'}
+
+  Aruba::StackPolicy:
+    Statement:
+      - Effect: Allow
+        Action: 'Update:*'
+        Principal: '*'
+        Resource: '*'
+
+Resources:
+  Database:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      AvailabilityZone: us-west-2a
+      ImageId: ami-e251209a
+      InstanceType: m5.large
+      IamInstanceProfile: {Ref: InstProf}
+      Aruba::BootstrapActions:
+        Actions:
+          - Path: {'Fn::Sub': 's3://${Bucket}/bootstrap/db.sh'}
+        Timeout: PT5M
+
+  DatabaseRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: DatabasePolicy
+          PolicyDocument: *database-role-policy
+
+  InstProf:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - Ref: DatabaseRole
+
+  LambdaStack:
+    Type: 'Aruba::Stack'
+    Properties:
+      Template:
+        LocalPath: nested_template.yml
+        S3Dest: {'Fn::Sub': 's3://${Bucket}/cf-templates'}
+      Parameters:
+        Bucket: {Ref: Bucket}
