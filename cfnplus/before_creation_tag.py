@@ -26,15 +26,12 @@
 # pylint: disable=too-many-locals
 # pylint: disable=unused-argument
 
-from . import actions
-from . import utils
+from . import action_tags, utils
 
 def evaluate(arg_node, ctx):
     '''
-    :return: Dict with this element:
-        - 'before_creation': list of functions that should be executed before
-        the stack is made
+    :return: Instance of utils.Result.
     '''
-    acts = actions.eval_beforecreation_or_aftercreation('Aruba::BeforeCreation', \
-        arg_node, ctx)
+    acts = action_tags.eval_beforecreation_or_aftercreation(\
+        'Aruba::BeforeCreation', arg_node, ctx)
     return utils.Result(before_creation=acts)

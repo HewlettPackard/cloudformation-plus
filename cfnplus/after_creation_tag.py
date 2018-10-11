@@ -26,13 +26,12 @@
 # pylint: disable=too-many-locals
 # pylint: disable=unused-argument
 
-from . import actions
-from . import utils
+from . import action_tags, utils
 
 def evaluate(arg_node, ctx):
     '''
-    :return: Instance of Result.
+    :return: Instance of utils.Result.
     '''
-    acts = actions.eval_beforecreation_or_aftercreation('Aruba::AfterCreation', \
-        arg_node, ctx)
+    acts = action_tags.eval_beforecreation_or_aftercreation(\
+        'Aruba::AfterCreation', arg_node, ctx)
     return utils.Result(after_creation=acts)
