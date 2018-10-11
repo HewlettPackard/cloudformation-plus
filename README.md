@@ -20,6 +20,106 @@
 
 This is a library that adds features to AWS CloudFormation that reduce the amount of code you must write in order to automate the deployment of non-trivial cloud-based systems.  Specifically, this library adds elements to the CloudFormation template language that perform tasks that otherwise would need to be done in your deploy script.
 
+### Example
+
+Suppose we want to use CloudFormation to make a single-node database and a Lambda function that implements an API endpoint.  Using CloudFormation Plus's extensions to the template language, we can make a template like this:
+
+```
+AWSTemplateFormatVersion: 2010-09-09
+
+Metadata:
+  Aruba::BeforeCreation:
+    - S3Upload:
+        LocalFile: bootstrap/db.sh
+        S3Dest: s3://my-bucket/bootstrap/db.sh
+
+Resources:
+  Database:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      AvailabilityZone: us-west-2a
+      ImageId: ami-e251209a
+      InstanceType: m5.large
+      Aruba::BootstrapActions:
+        Actions:
+          - Path: s3://my-bucket/bootstrap/db.sh
+        LogUri: s3://my-bucket/logs
+        Timeout: PT5M
+      IamInstanceProfile: {Ref: InstProf}
+
+  ApiLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Aruba::LambdaCode:
+        LocalPath: lambda/api
+        S3Dest: s3://my-bucket/lambda
+      Environment:
+        Variables:
+          DB_HOST: {'Fn::Sub': 'Database.PublicDnsName'}
+      Handler: api.handle
+      Runtime: python2.7
+
+  DatabaseRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: DatabasePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: 's3:HeadBucket'
+                Resource: '*'
+              - Effect: Allow
+                Action: 's3:ListBucket'
+                Resource: 'arn:aws:s3:::my-bucket'
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                Resource: 'arn:aws:s3:::my-bucket/*'
+
+  InstProf:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - Ref: DatabaseRole
+```
+
+Suppose we save this template to a directory called "my-api":
+
+```
+|- my-api/
+  |- template.yml
+```
+
+We can now write a shell script at my-api/bootstrap/db.sh that downloads and installs the database software, and we can write code for the Lambda function at `my-api/lambda/api/api.py`.
+
+```
+|- my-api/
+  |- bootstrap/
+    |- db.sh
+  |- lambda/
+    |- api/
+      |- api.py
+  |- template.yml
+```
+
+Processing this template with CloudFormation Plus before submitting it to CloudFormation results in the following:
+- `bootstrap/db.sh` is uploaded to the S3 bucket `my-bucket` at key `bootstrap/db.sh`
+- The `lambda/api` directory is bundled into a Lambda deployment package, which is uploaded to the S3 bucket `my-bucket`
+- After the EC2 instance is made, `db.sh` will be run on it.  If `db.sh` fails, the whole stack deployment will fail.  `db.sh`'s output will be written to the S3 bucket `my-bucket`.
+- The Lambda function will be set to use the uploaded deployment package that contains `lambda/api/apy.py`
+  - If an existing stack is being updated, the Lambda function's code will be updated
+
 ## Usage
 
 The rest of this document describes the extensions to the template language.  This section describes how to process templates that use these extensions.
@@ -38,7 +138,10 @@ _STACK_NAME = 'MyWebsite'
 _AWS_REGION = 'us-west-2'
 
 def clean_up_changesets(cfn):
-  resp = cfn.list_change_sets(StackName=_STACK_NAME)
+  try:
+    resp = cfn.list_change_sets(StackName=_STACK_NAME)
+  except botocore.exceptions.ClientError:
+    return
   for cs in resp['Summaries']:
     cfn.delete_change_set(ChangeSetName=cs['ChangeSetId'])
 
@@ -103,7 +206,7 @@ if __name__ == '__main__':
   main()
 ```
 
-Now, suppose that we change my_website.yml to use CloudFormation Plus template language extensions.  We must now change our program so that it uses the CloudFormation Plus library to process the template before passing it to CloudFormation.  First, we add the import:
+Now, suppose that we change `my_website.yml` to use CloudFormation Plus template language extensions.  We must now change our program so that it uses the CloudFormation Plus library to process the template before passing it to CloudFormation.  First, we add the import:
 
 ```
 import cfnplus
@@ -141,7 +244,7 @@ def main():
     cfnp_result.do_after_creation()
 ```
 
-Let's go over these changes.  All CloudFormation Plus features used in my_website.yml are processed by the call to `cfnplus.process_template`.  (The parameters for this function are described below.)  As you will learn when you read the sections below, some features generate template code, some features generate S3 actions that are to be done before stack creation/update, and some features generate S3 actions that are to be done after stack creation/update.  The return value of `cfnplus.process_template` contains the accumulated results of each feature in `my_website.yml`.  It is important to note that `cfnplus.process_template` does not perform any S3 actions &mdash; in fact, it has no side-effets.
+Let's go over these changes.  All CloudFormation Plus features used in `my_website.yml` are processed by the call to `cfnplus.process_template`.  (The parameters for this function are described below.)  As you will learn when you read the sections below, some features generate template code, some features generate S3 actions that are to be done before stack creation/update, and some features generate S3 actions that are to be done after stack creation/update.  The return value of `cfnplus.process_template` contains the accumulated results of each feature in `my_website.yml`.  It is important to note that `cfnplus.process_template` does not perform any S3 actions &mdash; in fact, it has no side-effets.
 
 We next put the return value (`cfnp_result`) in a `with` statement, and do the rest of the work in the body of this statement.  The purpose of the `with` statement is to support atomicity; if an exception is thrown in the `do_before_creation` call or in any statement after this call and before the `do_after_creation` call, the effects of the actions done by the `do_before_creation` call will be rolled back &mdash; for example, objects added to S3 will be removed, objects removed from S3 will be restored.  Similarly, if an exception is thrown by the `do_after_creation` call, the effects of any actions done by this call will be rolled back &mdash; but the effects of the `do_before_creation` call will NOT be rolled back.
 
@@ -338,7 +441,7 @@ If the path is relative, it must be relative to the template file.</dd>
 package should be uploaded</dd>
 </dl>
 
-Example:
+### Example
 
 ```
 MyFunction:
@@ -377,6 +480,8 @@ The property does the following:
 
 *NOTE:* The action programs must be in S3, and this property does not put them there.  You can use the [S3 operations elements](#s3-operations) defined in this library to upload the action programs to S3.
 
+*IMPORTANT:* The EC2 instance must be given an instance profile with a role that has permission to read the action programs in S3, and, if `LogUri` is used, it must also have permissions to write to the specified S3 location.
+
 ### Parameters
 
 <dl>
@@ -387,13 +492,63 @@ The property does the following:
 <dd>A list of strings to pass as arguments to the bootstrap program</dd>
 
 <dt><code>LOG_URI</code></dt>
-<dd>The "s3://BUCKET/KEY" URI of the directory in which to put the output of the
+<dd>(Optional) The "s3://BUCKET/KEY" URI of the directory in which to put the output of the
 bootstrap program</dd>
 
 <dt><code>TIMEOUT</code></dt>
 <dd>The length of time that we should wait for the bootstrap program to run.
 Must be in ISO8601 duration format.</dd>
 </dl>
+
+### Example
+
+```
+Database:
+  Type: 'AWS::EC2::Instance'
+  Properties:
+    AvailabilityZone: us-west-2a
+    ImageId: ami-e251209a
+    InstanceType: m5.large
+    IamInstanceProfile: {Ref: InstProf}
+    Aruba::BootstrapActions:
+      Actions:
+        - Path: s3://my-bucket/bootstrap/db.sh
+      Timeout: PT5M
+
+DatabaseRole:
+  Type: 'AWS::IAM::Role'
+  Properties:
+    AssumeRolePolicyDocument:
+      Version: 2012-10-17
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - ec2.amazonaws.com
+          Action:
+            - 'sts:AssumeRole'
+    Policies:
+      - PolicyName: DatabasePolicy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: 's3:HeadBucket'
+              Resource: '*'
+            - Effect: Allow
+              Action: 's3:ListBucket'
+              Resource: 'arn:aws:s3:::my-bucket'
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+              Resource: 'arn:aws:s3:::my-bucket/*'
+
+InstProf:
+  Type: 'AWS::IAM::InstanceProfile'
+  Properties:
+    Roles:
+      - Ref: DatabaseRole
+```
 
 ## Including nested stacks
 
