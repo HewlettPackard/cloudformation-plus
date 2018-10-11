@@ -30,11 +30,11 @@ import json
 import collections
 import os
 import boto3
-from . import utils, template_funcs, s3_ops
+from . import utils, eval_cfn_expr, s3_ops
 
 def _do_mkdir(arg_node, ctx):
     # eval URI
-    uri = template_funcs.eval_cfn_expr(arg_node, ctx)
+    uri = eval_cfn_expr.eval_expr(arg_node, ctx)
     bucket_name, key = utils.parse_s3_uri(uri)
     if not key.endswith('/'):
         key += '/'
@@ -64,8 +64,8 @@ def _do_sync(arg_node, ctx):
         raise ex
 
     # eval nodes
-    local_dir = template_funcs.eval_cfn_expr(local_dir_node, ctx)
-    s3_dest = template_funcs.eval_cfn_expr(s3_dest_node, ctx)
+    local_dir = eval_cfn_expr.eval_expr(local_dir_node, ctx)
+    s3_dest = eval_cfn_expr.eval_expr(s3_dest_node, ctx)
     bucket_name, dir_key = utils.parse_s3_uri(s3_dest)
     if not dir_key.endswith('/'):
         dir_key += '/'
@@ -127,8 +127,8 @@ def _do_upload(arg_node, ctx):
         raise ex
 
     # eval nodes
-    local_file = template_funcs.eval_cfn_expr(local_file_node, ctx)
-    s3_dest = template_funcs.eval_cfn_expr(s3_dest_node, ctx)
+    local_file = eval_cfn_expr.eval_expr(local_file_node, ctx)
+    s3_dest = eval_cfn_expr.eval_expr(s3_dest_node, ctx)
     bucket_name, key = utils.parse_s3_uri(s3_dest)
     if key.endswith('/'):
         raise utils.InvalidTemplate("S3Upload: Key must not end with '/'")

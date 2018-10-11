@@ -35,7 +35,7 @@ import tempfile
 import struct
 import yaml
 import boto3
-from . import template_funcs, utils, s3_ops
+from . import eval_cfn_expr, utils, s3_ops
 
 class _LambdaPkgMaker(object):
     '''
@@ -106,8 +106,8 @@ def evaluate(arg_node, ctx):
         raise ex
 
     # eval nodes in arg
-    local_path = template_funcs.eval_cfn_expr(local_path_node, ctx)
-    s3_dest = template_funcs.eval_cfn_expr(s3_dest_node, ctx)
+    local_path = eval_cfn_expr.eval_expr(local_path_node, ctx)
+    s3_dest = eval_cfn_expr.eval_expr(s3_dest_node, ctx)
     bucket_name, dir_key = utils.parse_s3_uri(s3_dest)
 
     # make abs path to local dir

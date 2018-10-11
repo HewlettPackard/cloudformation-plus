@@ -33,13 +33,28 @@ import unittest
 import numbers
 from . import utils
 
-def eval_cfn_expr(node, ctx):
+def eval_expr(node, ctx):
+    '''
+    Evaluate CloudFormation template nodes like "{Ref: SomeItem}",
+    "{'Fn::Sub': AnotherItem.SomeAttr}", and "{'Fn::ImportVaue': AnExportName}"
+    that represent scalar values.
+
+    :param node: A node from a parsed CloudFormation template that represents
+    a scalar value.
+    :param ctx: An instance of utils.Context.  It will be used to resolve
+    references in the node.
+
+    :return: The scalar value represented by the given node.
+    :throw: utils.InvalidTemplate
+    '''
+
     if isinstance(node, utils.base_str) or isinstance(node, numbers.Number): # pylint: disable=consider-merging-isinstance
         return node
 
     if not isinstance(node, collections.Mapping) or len(node) != 1:
         node_str = json.dumps(node)
-        raise utils.InvalidTemplate("e string expression: {}".format(node_str))
+        raise utils.InvalidTemplate("Invalid scalar expression: {}".\
+            format(node_str))
 
     handlers = {
         'Fn::Sub': _eval_cfn_sub,
@@ -57,8 +72,11 @@ def eval_cfn_expr(node, ctx):
 
 def _eval_cfn_ref(node, ctx):
     '''
-    :param node: The argument to a 'Ref' call
-    :return: The referenced value
+    :param node: The argument to a 'Ref' expression.
+    :param ctx: An instance of utils.Context.
+
+    :return: The referenced scalar value.
+    :throw: utils.InvalidTemplate
     '''
 
     if not isinstance(node, utils.base_str):
@@ -73,82 +91,73 @@ def _eval_cfn_ref(node, ctx):
 
 def _eval_cfn_importvalue(node, ctx):
     '''
-    :param node: The argument to an 'Fn::ImportValue' call
-    :return: The imported value
+    :param node: The argument to an 'Fn::ImportValue' expression.
+    :param ctx: An instance of utils.Context.
+
+    :return: The imported scalar value.
+    :throw: utils.InvalidTemplate
     '''
 
-    var_name = eval_cfn_expr(node, ctx)
+    var_name = eval_expr(node, ctx)
     return ctx.resolve_cfn_export(var_name)
 
 def _eval_cfn_sub(node, ctx):
     '''
-    :param node: The argument to an 'Fn::Sub' call
-    :return: The computed string
+    :param node: The argument to an 'Fn::Sub' expression.
+    :param ctx: An instance of utils.Context.
+
+    :return: The computed string.
+    :throw: utils.InvalidTemplate
     '''
+
+    # Arg to 'Fn::Sub' can be string or list.  If it's a string, we normalize
+    # it to a list.
 
     if isinstance(node, utils.base_str):
-        return _eval_cfn_sub_str(node, ctx)
-    elif isinstance(node, collections.Sequence):
-        return _eval_cfn_sub_list(node, ctx)
-    else:
-        raise utils.InvalidTemplate("Invalid arg for 'Fn::Sub': {}".\
-            format(json.dumps(node)))
+        node = [node, {}]
 
-def _eval_cfn_sub_str(node, ctx):
-    '''
-    :param node: The string argument to an 'Fn::Sub' call
-    :return: The computed string
-    '''
+    ex = utils.InvalidTemplate("Invalid arg for 'Fn::Sub': {}".\
+        format(json.dumps(node)))
+    if not isinstance(node, collections.Sequence) or len(node) != 2:
+        raise ex
 
+    # get components of arg
+    format_str = node[0]
+    local_symbols = node[1]
+    if not isinstance(format_str, utils.base_str) or \
+        not isinstance(local_symbols, collections.Mapping):
+        raise ex
+
+    # eval local symbols
+    new_ctx = ctx.copy()
+    for k, v in local_symbols.items():
+        new_ctx.set_var(k, eval_expr(v, ctx))
+
+    # make substitutions in format string
     regex = re.compile(r'\$\{([-.:_0-9a-zA-Z]*)\}')
     pos = 0
     result_buff = cStringIO.StringIO()
     while True:
         # look for variable ref
-        match = regex.search(node, pos=pos)
+        match = regex.search(format_str, pos=pos)
         if match is None:
             break
 
         # resolve variable
         var_name = match.group(1)
         try:
-            var_value = ctx.resolve_var(var_name)
+            var_value = new_ctx.resolve_var(var_name)
         except KeyError:
             raise utils.InvalidTemplate("Cannot resolve variable \"{}\"".\
                 format(var_name))
 
         # write variable's value to result
-        result_buff.write(node[pos:match.start()])
+        result_buff.write(format_str[pos:match.start()])
         result_buff.write(str(var_value))
         pos = match.end()
 
-    result_buff.write(node[pos:])
+    result_buff.write(format_str[pos:])
     return result_buff.getvalue()
-
-def _eval_cfn_sub_list(node, ctx):
-    '''
-    :param node: The list argument to an 'Fn::Sub' call
-    :return: The computed string
-    '''
-
-    ex = utils.InvalidTemplate("Invalid arg for 'Fn::Sub': {}".\
-        format(json.dumps(node)))
-    if len(node) != 2:
-        raise ex
-
-    # eval format string
-    format_str = eval_cfn_expr(node[0], ctx)
-
-    # eval local symbols
-    new_ctx = ctx.copy()
-    local_symbols = node[1]
-    if not isinstance(local_symbols, collections.Mapping):
-        raise ex
-    for k, v in local_symbols.items():
-        new_ctx.set_var(k, eval_cfn_expr(v, ctx))
-
-    # do substitution
-    return _eval_cfn_sub_str(format_str, new_ctx)
 
 class _Test(unittest.TestCase):
     def testSubWithString(self):
@@ -184,7 +193,7 @@ class _Test(unittest.TestCase):
             #
             # Call
             #
-            result = eval_cfn_expr(case['exp'], ctx)
+            result = eval_expr(case['exp'], ctx)
 
             #
             # Test
@@ -244,7 +253,7 @@ class _Test(unittest.TestCase):
             #
             # Call
             #
-            result = eval_cfn_expr(case['exp'], ctx)
+            result = eval_expr(case['exp'], ctx)
 
             #
             # Test
@@ -265,7 +274,7 @@ class _Test(unittest.TestCase):
         #
         # Call
         #
-        result = eval_cfn_expr(exp, ctx)
+        result = eval_expr(exp, ctx)
 
         #
         # Test
@@ -281,7 +290,7 @@ class _Test(unittest.TestCase):
         #
         # Call
         #
-        result = eval_cfn_expr({'Ref': 'Bucket'}, ctx)
+        result = eval_expr({'Ref': 'Bucket'}, ctx)
 
         #
         # Test
@@ -297,7 +306,7 @@ class _Test(unittest.TestCase):
         #
         # Call
         #
-        result = eval_cfn_expr({'Ref': 'AWS::Region'}, ctx)
+        result = eval_expr({'Ref': 'AWS::Region'}, ctx)
 
         #
         # Test
