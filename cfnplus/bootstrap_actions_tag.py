@@ -43,9 +43,11 @@ function go() {{
 go
 EXIT_CODE=$?
 
-# copy log to S3
-aws s3 cp --content-type text/plain /var/log/aruba-bootstrap/main \
-    "${{log_uri}}/main"
+if [ {should_copy_log} == True ]; then
+    # copy log to S3
+    aws s3 cp --content-type text/plain /var/log/aruba-bootstrap/main \
+        "${{log_uri}}/main"
+fi
 
 # notify CloudFormation of result
 yum install -y aws-cfn-bootstrap
@@ -65,9 +67,11 @@ RUN_BS_SCRIPT_TEMPLATE = '''
         "${{!LOG_LOCAL_PATH}}" 2>&1
     EXIT_CODE=$?
 
-    # copy log to S3
-    aws s3 cp --content-type text/plain "${{!LOG_LOCAL_PATH}}" \
-        "${{log_uri}}/{action_nbr}"
+    if [ {should_copy_log} == True ]; then
+        # copy log to S3
+        aws s3 cp --content-type text/plain "${{!LOG_LOCAL_PATH}}" \
+            "${{log_uri}}/{action_nbr}"
+    fi
 
     if [ "${{!EXIT_CODE}}" -ne 0 ]; then
         return 1
@@ -88,7 +92,7 @@ def evaluate(arg_node, ctx):
         raise utils.InvalidTemplate("{}: must contain mapping".format(tag_name))
     try:
         actions_node = arg_node['Actions']
-        log_uri_node = arg_node['LogUri']
+        log_uri_node = arg_node.get('LogUri')
         timeout_node = arg_node['Timeout']
     except KeyError as e:
         raise utils.InvalidTemplate("{}: missing '{}'".\
@@ -100,7 +104,9 @@ def evaluate(arg_node, ctx):
             format(tag_name))
 
     # make UserData script
-    cfn_subs = {'log_uri': log_uri_node}
+    cfn_subs = {
+        'log_uri': log_uri_node if log_uri_node is not None else 'unset',
+    }
     go_body = ''
     for i, action_node in enumerate(actions_node):
         # get child nodes
@@ -122,10 +128,14 @@ def evaluate(arg_node, ctx):
         go_body += RUN_BS_SCRIPT_TEMPLATE.format(
             action_nbr=i,
             args=' '.join(args),
+            should_copy_log=log_uri_node is not None,
         )
 
-    user_data_script = USER_DATA_SCRIPT_TEMPLATE.format(go_body=go_body, \
-        rsrc_name=ctx.resource_name)
+    user_data_script = USER_DATA_SCRIPT_TEMPLATE.format(
+        go_body=go_body,
+        rsrc_name=ctx.resource_name,
+        should_copy_log=log_uri_node is not None,
+    )
     user_data_node = {
         'Fn::Base64': {
             'Fn::Sub': [
