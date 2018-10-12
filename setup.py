@@ -12,13 +12,16 @@ setup(
     description='A library that reduces the amount of code you must write in order to deploy non-trivial applications to AWS CloudFormation',
     long_description=open('README.md').read(),
     url='http://github.com/HewlettPackard/cloudformation-plus',
-    author='Hewlett-Packard Enterprise',
+    author='Hewlett Packard Enterprise',
     author_email='charles.shearer@hpe.com',
     license='Apache License 2.0',
-    # packages=find_packages(exclude='test*'),
     packages=['cfnplus'],
     install_requires=[
         'boto3>=1.9,<2',
+        'pyyaml',
+    ],
+    tests_require=[
+        'pytest',
     ],
     classifiers=[
         'Intended Audience :: Developers',

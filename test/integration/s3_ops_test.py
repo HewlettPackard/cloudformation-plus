@@ -26,11 +26,11 @@
 # pylint: disable=too-many-locals
 # pylint: disable=unused-argument
 
-import cStringIO
 import unittest
+import io
 import boto3
 import botocore
-import s3_ops
+import cfnplus.s3_ops as s3_ops
 
 AWS_REGION = 'us-west-2'
 
@@ -94,9 +94,8 @@ class S3OpsTest(unittest.TestCase):
         #
 
         # make local file
-        file_contents = "Hello world"
-        buf = cStringIO.StringIO()
-        buf.write(file_contents)
+        file_contents = b"Hello world"
+        buf = io.BytesIO(file_contents)
 
         # make S3 key
         key = 'my_file'
@@ -124,9 +123,8 @@ class S3OpsTest(unittest.TestCase):
         #
 
         # make local file
-        file_contents = "Hello world"
-        buf = cStringIO.StringIO()
-        buf.write(file_contents)
+        file_contents = b"Hello world"
+        buf = io.BytesIO(file_contents)
 
         # make S3 key
         key = 'my_file'
@@ -157,14 +155,13 @@ class S3OpsTest(unittest.TestCase):
         key = 'my_file'
 
         # make existing S3 file
-        s3_contents_old = "Hello world"
+        s3_contents_old = b"Hello world"
         obj = self._bucket.put_object(Body=s3_contents_old, Key=key)
         obj.wait_until_exists()
 
         # make local file
-        file_contents_new = s3_contents_old + " again"
-        buf = cStringIO.StringIO()
-        buf.write(file_contents_new)
+        file_contents_new = s3_contents_old + b" again"
+        buf = io.BytesIO(file_contents_new)
 
         #
         # Call
@@ -192,14 +189,13 @@ class S3OpsTest(unittest.TestCase):
         key = 'my_file'
 
         # make existing S3 file
-        s3_contents_old = "Hello world"
+        s3_contents_old = b"Hello world"
         obj = self._bucket.put_object(Body=s3_contents_old, Key=key)
         obj.wait_until_exists()
 
         # make local file
-        file_contents_new = s3_contents_old + " again"
-        buf = cStringIO.StringIO()
-        buf.write(file_contents_new)
+        file_contents_new = s3_contents_old + b" again"
+        buf = io.BytesIO(file_contents_new)
 
         #
         # Call
@@ -227,7 +223,7 @@ class S3OpsTest(unittest.TestCase):
         key = 'my_file'
 
         # make S3 object
-        s3_contents = 'haaaiii!'
+        s3_contents = b"haaaiii!"
         obj = self._bucket.put_object(Key=key, Body=s3_contents)
         obj.wait_until_exists()
         self.assertObjectExists(key, s3_contents)
@@ -258,7 +254,7 @@ class S3OpsTest(unittest.TestCase):
         key = 'my_file'
 
         # make S3 object
-        s3_contents = 'haaaiii!'
+        s3_contents = b"haaaiii!"
         obj = self._bucket.put_object(Key=key, Body=s3_contents)
         obj.wait_until_exists()
         self.assertObjectExists(key, s3_contents)

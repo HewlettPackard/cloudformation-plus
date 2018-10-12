@@ -28,8 +28,6 @@
 import json
 import re
 import collections
-import cStringIO
-import unittest
 import numbers
 from . import utils
 
@@ -48,7 +46,7 @@ def eval_expr(node, ctx):
     :throw: utils.InvalidTemplate
     '''
 
-    if isinstance(node, utils.base_str) or isinstance(node, numbers.Number): # pylint: disable=consider-merging-isinstance
+    if isinstance(node, (utils.base_str, numbers.Number)):
         return node
 
     if not isinstance(node, collections.Mapping) or len(node) != 1:
@@ -62,8 +60,7 @@ def eval_expr(node, ctx):
         'Ref': _eval_cfn_ref,
     }
 
-    func_name = node.keys()[0]
-    func_arg = node[func_name]
+    func_name, func_arg = utils.dict_only_item(node)
     try:
         h = handlers[func_name]
     except KeyError:
@@ -136,7 +133,7 @@ def _eval_cfn_sub(node, ctx):
     # make substitutions in format string
     regex = re.compile(r'\$\{([-.:_0-9a-zA-Z]*)\}')
     pos = 0
-    result_buff = cStringIO.StringIO()
+    result_buff = utils.StringIO()
     while True:
         # look for variable ref
         match = regex.search(format_str, pos=pos)
@@ -158,161 +155,3 @@ def _eval_cfn_sub(node, ctx):
 
     result_buff.write(format_str[pos:])
     return result_buff.getvalue()
-
-class _Test(unittest.TestCase):
-    def testSubWithString(self):
-        cases = [
-            {
-                'exp': {'Fn::Sub': 'my name is Woobie!'},
-                'symbols': {},
-                'result': 'my name is Woobie!',
-            },
-            {
-                'exp': {'Fn::Sub': 'my name is ${name}!'},
-                'symbols': {'name': 'Woobie'},
-                'result': 'my name is Woobie!',
-            },
-            {
-                'exp': {'Fn::Sub': 'my ${attr} is ${value}!'},
-                'symbols': {'attr': 'name', 'value': 'Woobie'},
-                'result': 'my name is Woobie!',
-            },
-            {
-                'exp': {'Fn::Sub': 'I have ${n} cats!'},
-                'symbols': {'n': 2},
-                'result': 'I have 2 cats!',
-            },
-        ]
-
-        for case in cases:
-            #
-            # Set up
-            #
-            ctx = utils.Context(case['symbols'])
-
-            #
-            # Call
-            #
-            result = eval_expr(case['exp'], ctx)
-
-            #
-            # Test
-            #
-            self.assertEqual(case['result'], result)
-
-    def testSubWithList(self):
-        cases = [
-            {
-                'exp': {
-                    'Fn::Sub': [
-                        'my name is Woobie!',
-                        {},
-                    ],
-                },
-                'symbols': {},
-                'result': 'my name is Woobie!',
-            },
-            {
-                'exp': {
-                    'Fn::Sub': [
-                        'my name is ${name}!',
-                        {'name': 'Woobie'},
-                    ],
-                },
-                'symbols': {},
-                'result': 'my name is Woobie!',
-            },
-            {
-                'exp': {
-                    'Fn::Sub': [
-                        'my ${attr} is ${value}!',
-                        {'attr': 'name', 'value': 'Woobie'},
-                    ],
-                },
-                'symbols': {},
-                'result': 'my name is Woobie!',
-            },
-            {
-                'exp': {
-                    'Fn::Sub': [
-                        'my ${attr} is ${value}!',
-                        {'value': 'Woobie'},
-                    ],
-                },
-                'symbols': {'attr': 'name'},
-                'result': 'my name is Woobie!',
-            },
-        ]
-
-        for case in cases:
-            #
-            # Set up
-            #
-            ctx = utils.Context(case['symbols'])
-
-            #
-            # Call
-            #
-            result = eval_expr(case['exp'], ctx)
-
-            #
-            # Test
-            #
-            self.assertEqual(case['result'], result)
-
-    def testImportWithSub(self):
-        #
-        # Set up
-        #
-        exp = {
-            'Fn::ImportValue': {'Fn::Sub': 'Tc-${DeployId}-BucketName'}
-        }
-        ctx = utils.Context({'DeployId': '1'})
-        ctx.resolve_cfn_export = lambda k: 'woobie' if k == 'Tc-1-BucketName' \
-            else None
-
-        #
-        # Call
-        #
-        result = eval_expr(exp, ctx)
-
-        #
-        # Test
-        #
-        self.assertEqual('woobie', result)
-
-    def testRefWithRegVar(self):
-        #
-        # Set up
-        #
-        ctx = utils.Context({'Bucket': 'Woobie'})
-
-        #
-        # Call
-        #
-        result = eval_expr({'Ref': 'Bucket'}, ctx)
-
-        #
-        # Test
-        #
-        self.assertEqual('Woobie', result)
-
-    def testRefWithBuiltInVar(self):
-        #
-        # Set up
-        #
-        ctx = utils.Context({}, aws_region='us-west-2')
-
-        #
-        # Call
-        #
-        result = eval_expr({'Ref': 'AWS::Region'}, ctx)
-
-        #
-        # Test
-        #
-        self.assertEqual('us-west-2', result)
-
-if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(_Test)
-    unittest.TextTestRunner(verbosity=2).run(suite)

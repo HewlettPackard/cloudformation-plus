@@ -218,7 +218,9 @@ def _processs_tags(template, ctx):
             final_result.after_creation.extend(result.after_creation)
 
         elif isinstance(tag_value, collections.Mapping):
-            for next_tag_name, next_tag_value in tag_value.items():
+            # we may modify the tag_value dict during iteration, so make a list of its items
+            next_items = list(tag_value.items())
+            for next_tag_name, next_tag_value in next_items:
                 # recurse
                 eval_recursive(next_tag_name, next_tag_value, tag_value, \
                     curr_ctx)

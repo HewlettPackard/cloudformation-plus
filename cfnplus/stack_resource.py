@@ -29,7 +29,7 @@
 import collections
 import hashlib
 import json
-import cStringIO
+import io
 import boto3
 from . import utils, eval_cfn_expr, s3_ops
 
@@ -96,7 +96,6 @@ def evaluate(resource, ctx):
     new_ctx.stack_name = None
     new_template_str = ctx.proc_result_cache_get(imported_template_str, new_ctx)
     if new_template_str is None:
-        print("Evaluating Aruba tags in {}".format(template_abs_path))
         result = ctx.process_template_func(imported_template_str, new_ctx)
 
         # add to cache
@@ -107,12 +106,12 @@ def evaluate(resource, ctx):
 
     # make S3 key
     h = hashlib.new(utils.FILE_HASH_ALG)
-    h.update(result.new_template)
+    h.update(result.new_template.encode('utf-8'))
     s3_key = '{}/{}'.format(s3_dir_key, h.hexdigest())
 
     def upload_action(undoers, committers):
-        buf = cStringIO.StringIO()
-        buf.write(result.new_template)
+        buf = io.BytesIO()
+        buf.write(result.new_template.encode('utf-8'))
         buf.seek(0)
         bucket = boto3.resource('s3', region_name=ctx.aws_region).\
             Bucket(s3_bucket)

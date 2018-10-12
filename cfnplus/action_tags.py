@@ -29,6 +29,7 @@
 import json
 import collections
 import os
+import io
 import boto3
 from . import utils, eval_cfn_expr, s3_ops
 
@@ -109,7 +110,7 @@ def _do_sync(arg_node, ctx):
         for fn in local_files:
             local_path = os.path.join(abs_local_path, fn)
             key = dir_key + fn
-            with open(local_path) as f:
+            with io.open(local_path, 'rb') as f:
                 s3_ops.upload_file(f, bucket, key, undoers, committers)
 
     return action
@@ -141,8 +142,8 @@ def _do_upload(arg_node, ctx):
         bucket = boto3.resource('s3', region_name=ctx.aws_region).\
             Bucket(bucket_name)
 
-        # make abs path to local file
-        with open(ctx.abspath(local_file)) as f:
+        # upload
+        with io.open(ctx.abspath(local_file), 'rb') as f:
             s3_ops.upload_file(f, bucket, key, undoers, committers)
 
     return action
@@ -173,7 +174,7 @@ def eval_beforecreation_or_aftercreation(tag_name, arg_node, ctx):
             len(action_node) != 1:
             raise ex
 
-        action_name, action_arg = action_node.items()[0]
+        action_name, action_arg = utils.dict_only_item(action_node)
         try:
             action_handler = _ACTION_HANDLERS[action_name]
         except KeyError:

@@ -2,3 +2,5 @@
 dist
 *.pyc
 *.pyo
+.pytest_cache
+.tox

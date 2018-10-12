@@ -30,11 +30,29 @@
 
 import os
 import json
-import urlparse
+import io
+try:
+    from urlparse import urlparse
+except ImportError:
+    # Python 3
+    from urllib.parse import urlparse
 import boto3
 import botocore
 
-base_str = (str, unicode)
+try:
+    base_str = basestring
+except NameError:
+    # Python 3
+    base_str = str
+
+try:
+    unicode
+except NameError:
+    # Python 3
+    StringIO = io.StringIO
+else:
+    # Python 2
+    StringIO = io.BytesIO
 
 FILE_HASH_ALG = 'sha1'
 
@@ -60,7 +78,7 @@ def parse_s3_uri(uri):
     :return: A pair (bucket, key)
     '''
 
-    uri = urlparse.urlparse(uri)
+    uri = urlparse(uri)
     if uri.scheme != 's3':
         raise InvalidTemplate("Invalid URI: '{}'".format(uri))
     bucket = uri.netloc
@@ -68,6 +86,15 @@ def parse_s3_uri(uri):
     if key.startswith('/'):
         key = key[1:]
     return (bucket, key)
+
+def dict_only_item(d):
+    try:
+        # Python 2
+        key = d.iterkeys().next()
+    except AttributeError:
+        # Python 3
+        key = next(iter(d.keys()))
+    return key, d[key]
 
 class Context(object):
     def __init__(self, symbols, aws_region=None, \

@@ -54,9 +54,9 @@ def upload_file(f, bucket, key, undoers, committers):
     while True:
         buf = f.read(1024)
         if len(buf) == 0:
-            hashvalue = base64.b64encode(h.digest())
             break
         h.update(buf)
+    hashvalue = str(base64.b64encode(h.digest()))
 
     # check if file was already uploaded
     previous_version = None

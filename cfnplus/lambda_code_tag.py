@@ -33,6 +33,7 @@ import collections
 import json
 import tempfile
 import struct
+import io
 import yaml
 import boto3
 from . import eval_cfn_expr, utils, s3_ops
@@ -64,11 +65,12 @@ class _LambdaPkgMaker(object):
     def hash(self):
         h = hashlib.new(utils.FILE_HASH_ALG)
         for pkg_path, local_path in self._entries.items():
-            h.update(struct.pack('>Q', len(pkg_path))) # path_in_zipfile_len
-            h.update(pkg_path) # path_in_zipfile
+            pkg_path_encoded = pkg_path.encode('utf-8')
+            h.update(struct.pack('>Q', len(pkg_path_encoded))) # path_in_zipfile_len
+            h.update(pkg_path_encoded) # path_in_zipfile
             stat = os.stat(local_path)
             h.update(struct.pack('>Q', stat.st_size)) # file_contents_len
-            with open(local_path) as f: # file_contents
+            with io.open(local_path, 'rb') as f: # file_contents
                 while True:
                     data = f.read(1024)
                     if len(data) == 0:
