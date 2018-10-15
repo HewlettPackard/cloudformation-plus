@@ -3,6 +3,8 @@
 ## Contents
 
 - [Intro](#intro)
+  - [Example](#example)
+- [Installation](#installation)
 - [Usage](#usage)
   - [Signature of `process_template`](#signature-of-process_template)
 - [Note: Intrinsic functions](#note-intrinsic-functions)
@@ -18,7 +20,7 @@
 
 ## Intro
 
-This is a library that adds features to AWS CloudFormation that reduce the amount of code you must write in order to automate the deployment of non-trivial cloud-based systems.  Specifically, this library adds elements to the CloudFormation template language that perform tasks that otherwise would need to be done in your deploy script.
+This is a Python library that adds features to AWS CloudFormation that reduce the amount of code you must write in order to automate the deployment of non-trivial cloud-based systems.  Specifically, this library adds elements to the CloudFormation template language that perform tasks that otherwise would need to be done in your deploy script.
 
 ### Example
 
@@ -113,6 +115,17 @@ CloudFormation Plus helps in the following ways:
 - In the `Metadata` section near the top, the `Aruba::BeforeCreation` element uploads `bootstrap/db.sh` to the S3 bucket `my-bucket` at key `bootstrap/db.sh`.
 - In the `Database` resource, the `Aruba::BootstrapActions` property causes `db.sh` to be executed after the database node is made.  If `db.sh` fails, the whole stack deployment will fail.  `db.sh`'s output will be written to the S3 bucket `my-bucket`.
 - In the `ApiLambda` resource, the `Aruba::LambdaCode` property bundles the local `lambda/api` directory into a Lambda deployment package, and then uploads it to the S3 bucket `my-bucket`.  It also sets the function to use that deployment package as its code (and when this template is used to update an existing stack, it ensures that the function uses the latest package).
+
+
+## Installation
+
+CloudFormation Plus works with Python 2 and 3.
+
+1. Download the source package for one of <a href="https://github.com/HewlettPackard/cloudformation-plus/releases" target="_blank">the releases</a>.
+1. Example the source package, and `cd` into the resulting directory.
+1. Run `pip install .`
+
+You can now use CloudFormation Plus in your scripts by importing `cfnplus`.
 
 ## Usage
 
