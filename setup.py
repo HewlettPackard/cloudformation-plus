@@ -11,6 +11,7 @@ setup(
     version='1.0-pr1',
     description='A library that reduces the amount of code you must write in order to deploy non-trivial applications to AWS CloudFormation',
     long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     url='https://github.com/HewlettPackard/cloudformation-plus',
     author='Hewlett Packard Enterprise',
     author_email='charles.shearer@hpe.com',
