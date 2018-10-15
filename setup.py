@@ -8,10 +8,10 @@ from setuptools import setup, find_packages
 
 setup(
     name='cloudformation-plus',
-    version='0.1dev',
+    version='1.0-pr1',
     description='A library that reduces the amount of code you must write in order to deploy non-trivial applications to AWS CloudFormation',
     long_description=open('README.md').read(),
-    url='http://github.com/HewlettPackard/cloudformation-plus',
+    url='https://github.com/HewlettPackard/cloudformation-plus',
     author='Hewlett Packard Enterprise',
     author_email='charles.shearer@hpe.com',
     license='Apache License 2.0',
