@@ -105,15 +105,14 @@ def main():
     ]
 
     # process language extensions
-    cfnp_result = cfnplus.process_template(
+    with cfnplus.process_template(
         template,
         params, # template params
         _AWS_REGION,
         _TEMPLATE_PATH,
         _STACK_NAME,
-    )
+    ) as cfnp_result:
 
-    with cfnp_result as cfnp_result:
         # do actions that must be done before stack creation/update
         cfnp_result.do_before_creation()
 

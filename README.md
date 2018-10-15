@@ -22,7 +22,18 @@ This is a library that adds features to AWS CloudFormation that reduce the amoun
 
 ### Example
 
-Suppose we want to use CloudFormation to make a single-node database and a Lambda function that implements an API endpoint.  Using CloudFormation Plus's extensions to the template language, we can make a template like this:
+Suppose we want to use CloudFormation to make a database node and a Lambda function that implements an API endpoint.  We write a shell script that configures the database node (i.e., downloads and installs the database software) and a program that implements the Lambda function's logic.  We put both files in this directory structure:
+
+```
+|- my-api/
+  |- bootstrap/
+    |- db.sh
+  |- lambda/
+    |- api/
+      |- api.py
+```
+
+Using CloudFormation Plus's extensions to the template language, we can make the template like this:
 
 ```
 AWSTemplateFormatVersion: 2010-09-09
@@ -85,6 +96,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - 's3:GetObject'
+                  - 's3:PutObject'
                 Resource: 'arn:aws:s3:::my-bucket/*'
 
   InstProf:
@@ -94,39 +106,21 @@ Resources:
         - Ref: DatabaseRole
 ```
 
-Suppose we save this template to a directory called "my-api":
+This template would be saved at `my-api/template.yml`.
 
-```
-|- my-api/
-  |- template.yml
-```
+CloudFormation Plus helps in the following ways:
 
-We can now write a shell script at my-api/bootstrap/db.sh that downloads and installs the database software, and we can write code for the Lambda function at `my-api/lambda/api/api.py`.
-
-```
-|- my-api/
-  |- bootstrap/
-    |- db.sh
-  |- lambda/
-    |- api/
-      |- api.py
-  |- template.yml
-```
-
-Processing this template with CloudFormation Plus before submitting it to CloudFormation results in the following:
-- `bootstrap/db.sh` is uploaded to the S3 bucket `my-bucket` at key `bootstrap/db.sh`
-- The `lambda/api` directory is bundled into a Lambda deployment package, which is uploaded to the S3 bucket `my-bucket`
-- After the EC2 instance is made, `db.sh` will be run on it.  If `db.sh` fails, the whole stack deployment will fail.  `db.sh`'s output will be written to the S3 bucket `my-bucket`.
-- The Lambda function will be set to use the uploaded deployment package that contains `lambda/api/apy.py`
-  - If an existing stack is being updated, the Lambda function's code will be updated
+- In the `Metadata` section near the top, the `Aruba::BeforeCreation` element uploads `bootstrap/db.sh` to the S3 bucket `my-bucket` at key `bootstrap/db.sh`.
+- In the `Database` resource, the `Aruba::BootstrapActions` property causes `db.sh` to be executed after the database node is made.  If `db.sh` fails, the whole stack deployment will fail.  `db.sh`'s output will be written to the S3 bucket `my-bucket`.
+- In the `ApiLambda` resource, the `Aruba::LambdaCode` property bundles the local `lambda/api` directory into a Lambda deployment package, and then uploads it to the S3 bucket `my-bucket`.  It also sets the function to use that deployment package as its code (and when this template is used to update an existing stack, it ensures that the function uses the latest package).
 
 ## Usage
 
 The rest of this document describes the extensions to the template language.  This section describes how to process templates that use these extensions.
 
-CloudFormation Plus is a Python library, and it is intended to be used with stacks that are made/updated by Python programs.  In other words, it is best if the creation/update of your stacks is automated with Python programs.  If you always use the CloudFormation console to do this, it will be tricky to integrate CloudFormation Plus into your workflow.
+CloudFormation Plus is a Python library, and it is intended to be used with stacks that are made/updated by Python programs.  In other words, it is best if the creation/update of your stacks is automated with Python programs.
 
-Let's use an example consisting of a single template named "my_website.yml".  Ignoring CloudFormation Plus for now, we can automate the creation and update of the stack with a Python program and the boto3 library:
+Let's use an example consisting of a single template named "my_website.yml".  We can write a Python program that uses boto3 to deploy and update this stack:
 
 ```
 import time
@@ -137,118 +131,70 @@ _TEMPLATE_PATH = 'my_website.yml'
 _STACK_NAME = 'MyWebsite'
 _AWS_REGION = 'us-west-2'
 
-def clean_up_changesets(cfn):
-  try:
-    resp = cfn.list_change_sets(StackName=_STACK_NAME)
-  except botocore.exceptions.ClientError:
-    return
-  for cs in resp['Summaries']:
-    cfn.delete_change_set(ChangeSetName=cs['ChangeSetId'])
-
 def make_or_update_stack(cfn, template):
-  # does stack exist?
-  try:
-    cfn.describe_stacks(StackName=_STACK_NAME)
-    stack_exists = True
-  except botocore.exceptions.ClientError:
-    stack_exists = False
-
-  # make change set
-  change_set = cfn.create_change_set(
-    StackName=_STACK_NAME,
-    TemplateBody=template,
-    ChangeSetName='{}-change-set'.format(_STACK_NAME),
-    ChangeSetType='UPDATE' if stack_exists else 'CREATE',
-  )
-
-  # wait for change set to get made
-  while True:
-    resp = cfn.describe_change_set(ChangeSetName=change_set['Id'])
-    status = resp['Status']
-    if status == 'CREATE_COMPLETE':
-      break
-    elif status == 'FAILED':
-      reason = resp['StatusReason']
-
-      if "The submitted information didn't contain changes." in reason or \
-          "No updates are to be performed." in reason:
-          print("No changes")
-          return
-
-      msg = "Failed to make change set for {}: {}".format(stack_name, reason)
-      raise Exception(msg)
-
-    time.sleep(2)
-
-  # execute change set
-  cfn.execute_change_set(ChangeSetName=change_set['Id'])
-
-  # wait for execution to finish
-  if stack_exists:
-    waiter = cfn.get_waiter('stack_update_complete')
-  else:
-    waiter = cfn.get_waiter('stack_create_complete')
-  waiter.wait(StackName=_STACK_NAME)
+  ...
 
 def main():
-  cfn = boto3.client('cloudformation', region_name=_AWS_REGION)
+    # read template
+    with open(_TEMPLATE_PATH) as f:
+        template = f.read()
 
-  # read template
-  with open(_TEMPLATE_PATH) as f:
-    template = f.read()
-
-  try:
+    # make/update stack
     make_or_update_stack(cfn, template)
-  finally:
-    clean_up_changesets(cfn)
 
 if __name__ == '__main__':
   main()
 ```
 
-Now, suppose that we change `my_website.yml` to use CloudFormation Plus template language extensions.  We must now change our program so that it uses the CloudFormation Plus library to process the template before passing it to CloudFormation.  First, we add the import:
+(I omit the body of `make_or_update_stack` because it's quite verbose and not important for the current purpose.  If you'd like to see how it could be written, confer <a href="https://github.com/HewlettPackard/cloudformation-plus/blob/master/example/deploy.py#L47" target="_blank">this</a>.)
+
+If we want to use CloudFormation Plus template language extensions in `my_website.yml`, we need to change this script thus:
 
 ```
+import time
+import boto3
+import botocore
 import cfnplus
-```
 
-Next, we change `main`:
+_TEMPLATE_PATH = 'my_website.yml'
+_STACK_NAME = 'MyWebsite'
+_AWS_REGION = 'us-west-2'
 
-```
+def make_or_update_stack(cfn, template):
+  ...
+
 def main():
-  cfn = boto3.client('cloudformation', region_name=_AWS_REGION)
+    # read template
+    with open(_TEMPLATE_PATH) as f:
+        template = f.read()
 
-  # read template
-  with open(_TEMPLATE_PATH) as f:
-    template = f.read()
+    # process language extensions
+    with cfnplus.process_template(
+        template,
+        [],  # template params
+        _AWS_REGION,
+        _TEMPLATE_PATH,
+        _STACK_NAME,
+    ) as cfnp_result:
 
-  # process language extensions
-  cfnp_result = cfnplus.process_template(
-    template,
-    [], # template params
-    _AWS_REGION,
-    _TEMPLATE_PATH,
-    _STACK_NAME,
-  )
+        # do actions that must be done before stack creation/update
+        cfnp_result.do_before_creation()
 
-  with cfnp_result as cfnp_result:
-    # do actions that must be done before stack creation/update
-    cfnp_result.do_before_creation()
+        # make/update stack
+        make_or_update_stack(cfn, template)
 
-    try:
-      make_or_update_stack(cfn, cfnp_result.new_template)
-    finally:
-      clean_up_changesets(cfn)
+        # do actions that must be done after stack creation/update
+        cfnp_result.do_after_creation()
 
-    # do actions that must be done after stack creation/update
-    cfnp_result.do_after_creation()
+if __name__ == '__main__':
+  main()
 ```
 
-Let's go over these changes.  All CloudFormation Plus features used in `my_website.yml` are processed by the call to `cfnplus.process_template`.  (The parameters for this function are described below.)  As you will learn when you read the sections below, some features generate template code, some features generate S3 actions that are to be done before stack creation/update, and some features generate S3 actions that are to be done after stack creation/update.  The return value of `cfnplus.process_template` contains the accumulated results of each feature in `my_website.yml`.  It is important to note that `cfnplus.process_template` does not perform any S3 actions &mdash; in fact, it has no side-effets.
+Let's go over these changes.  All CloudFormation Plus features used in `my_website.yml` are processed by the call to `cfnplus.process_template`.  (The parameters for this function are described below.)  As you will learn when you read the sections below, some features generate template code, some features generate S3 actions that are to be done before stack creation/update, and some features generate S3 actions that are to be done after stack creation/update.  The return value of `cfnplus.process_template` contains the accumulated results of each feature in `my_website.yml`.  It is important to note that `cfnplus.process_template` itself does not perform any S3 actions &mdash; in fact, it has no side-effets.
 
-We next put the return value (`cfnp_result`) in a `with` statement, and do the rest of the work in the body of this statement.  The purpose of the `with` statement is to support atomicity; if an exception is thrown in the `do_before_creation` call or in any statement after this call and before the `do_after_creation` call, the effects of the actions done by the `do_before_creation` call will be rolled back &mdash; for example, objects added to S3 will be removed, objects removed from S3 will be restored.  Similarly, if an exception is thrown by the `do_after_creation` call, the effects of any actions done by this call will be rolled back &mdash; but the effects of the `do_before_creation` call will NOT be rolled back.
+We do the rest of the work in the body of the `with` statement.  The purpose of the `with` statement is to support atomicity; if an exception is thrown in the `do_before_creation` call or in any statement after this call and before the `do_after_creation` call, the effects of the actions done by the `do_before_creation` call will be rolled back &mdash; for example, objects added to S3 will be removed, objects removed from S3 will be restored.  Similarly, if an exception is thrown by the `do_after_creation` call, the effects of any actions done by this call will be rolled back &mdash; but the effects of the `do_before_creation` call will NOT be rolled back.
 
-The most likely cause of exceptions will be problems with the original (non-transformed) template.  CloudFormation supports rollback of failed stack changes; with this library, you now can roll back S3 changes as well.
+The most likely cause of exceptions will be problems with the original (non-transformed) template.  CloudFormation supports rollback of failed stack changes; with CloudFormation Plus, you now can roll back S3 changes as well.
 
 ### Signature of `process_template`
 
