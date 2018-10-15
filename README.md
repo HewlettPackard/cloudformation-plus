@@ -8,15 +8,17 @@
 - [Usage](#usage)
   - [Signature of `process_template`](#signature-of-process_template)
 - [Note: Intrinsic functions](#note-intrinsic-functions)
-- [S3 operations](#s3-operations)
-  - [Making a directory](#making-a-directory)
-  - [Uploading a file](#uploading-a-file)
-  - [Syncing a directory](#syncing-a-directory)
-- [Making and updating Lambda functions](#making-and-updating-lambda-functions)
-- [Bootstrapping EC2 instances](#bootstrapping-ec2-instances)
-- [Including nested stacks](#including-nested-stacks)
-- [Using YAML anchors in templates](#using-yaml-anchors-in-templates)
-- [Setting a stack policy](#setting-a-stack-policy)
+- [Features](#features)
+  - [Atomicity](#atomicity)
+  - [S3 operations](#s3-operations)
+    - [Making a directory](#making-a-directory)
+    - [Uploading a file](#uploading-a-file)
+    - [Syncing a directory](#syncing-a-directory)
+  - [Making and updating Lambda functions](#making-and-updating-lambda-functions)
+  - [Bootstrapping EC2 instances](#bootstrapping-ec2-instances)
+  - [Including nested stacks](#including-nested-stacks)
+  - [Using YAML anchors in templates](#using-yaml-anchors-in-templates)
+  - [Setting a stack policy](#setting-a-stack-policy)
 
 ## Intro
 
@@ -280,7 +282,13 @@ The following intrinsic functions are supported:
 - `fn::Sub`
 - `Ref`
 
-## S3 operations
+## Features
+
+### Atomicity
+
+A great aspect of CloudFormation is that it is (usually) able to roll back resource changes when an error occurs.  This is also true of S3 operations performed by CloudFormation Plus.  Confer [above](#usage) to see how to use the CloudFormation Plus library to enable this.
+
+### S3 operations
 
 You can specify S3 operations to be done before or after a stack is made from your template.  For the former, add a list to your template's `Metadata` section with the label `Aruba::BeforeCreation`, and add your actions to that list.  For the latter, the list should have the label `Aruba::AfterCreation`.
 
@@ -303,7 +311,9 @@ Resources:
 
 The following subsections describe how to define actions.
 
-### Making a directory
+*NOTE:* Versioning must be enabled on the bucket.  This is needed because it is used to undo S3 operations when an error occurs.
+
+#### Making a directory
 
 ```
 S3Mkdir: S3_DEST
@@ -315,14 +325,14 @@ If a directory already exists at the destination, this action does nothing.
 
 NOTE: This is done by adding a 0-byte object with the specified key (plus a '/' at the end if it doesn't end with one already).
 
-#### Parameters
+##### Parameters
 
 <dl>
 <dt><code>S3_DEST</code></dt>
 <dd>An "s3://BUCKET/KEY" URI at which a directory should be made</dd>
 </dt>
 
-### Uploading a file
+#### Uploading a file
 
 ```
 S3Upload:
@@ -334,7 +344,7 @@ This action uploads a local file to an S3 bucket.
 
 If a file already exists at the destination, this action overwrites it.
 
-#### Parameters
+##### Parameters
 
 <dl>
 <dt><code>LOCAL_FILE</code></dt>
@@ -345,7 +355,7 @@ it must be relative to the template file.</dd>
 <dd>An "s3://BUCKET/KEY" URI to which the file should be uploaded</dd>
 </dl>
 
-### Syncing a directory
+#### Syncing a directory
 
 ```
 S3Sync:
@@ -357,7 +367,7 @@ This action updates a directory in S3 with the contents of a local directory.  F
 
 If nothing yet exists at the destination, a directory is created there.
 
-#### Parameters
+##### Parameters
 
 <dl>
 <dt><code>LOCAL_DIR</code></dt>
@@ -370,7 +380,7 @@ this directory will contain (directory or indirectly) all the files in the local
 directory, and nothing else.</dd>
 </dl>
 
-## Making and updating Lambda functions
+### Making and updating Lambda functions
 
 CloudFormation can be used to make Lambda functions, but it does not help you stage your code in S3.  Moreover, it is difficult to update Lambda functions with CloudFormation &mdash; changing the code in S3 will not actually change the code that your function runs.
 
@@ -388,7 +398,7 @@ This property does the following:
 - Builds a Lambda deployment package containing the files in the directory at `LOCAL_PATH`, and uploads it to S3
 - If the Lambda function already exists and any code in the directory at `LOCAL_PATH` has changed, updates the Lambda function to use the new code
 
-### Parameters
+#### Parameters
 
 <dl>
 <dt><code>LOCAL_PATH</code></dt>
@@ -400,7 +410,7 @@ If the path is relative, it must be relative to the template file.</dd>
 package should be uploaded</dd>
 </dl>
 
-### Example
+#### Example
 
 ```
 MyFunction:
@@ -414,7 +424,7 @@ MyFunction:
     Timeout: 30
 ```
 
-## Bootstrapping EC2 instances
+### Bootstrapping EC2 instances
 
 CloudFormation does lets you <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/deploying.applications.html" target="_blank">bootstrap EC2 instances</a>, but it's a bit complicated and is missing some useful features.
 
@@ -441,7 +451,7 @@ The property does the following:
 
 *IMPORTANT:* The EC2 instance must be given an instance profile with a role that has permission to read the action programs in S3, and, if `LogUri` is used, it must also have permissions to write to the specified S3 location.
 
-### Parameters
+#### Parameters
 
 <dl>
 <dt><code>ACTION_PATH</code></dt>
@@ -459,7 +469,7 @@ bootstrap program</dd>
 Must be in ISO8601 duration format.</dd>
 </dl>
 
-### Example
+#### Example
 
 ```
 Database:
@@ -509,7 +519,7 @@ InstProf:
       - Ref: DatabaseRole
 ```
 
-## Including nested stacks
+### Including nested stacks
 
 With <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-stack.html" target="_blank">the `AWS::CloudFormation::Stack` resource type</a>, CloudFormation lets you include stacks as resources of other stacks, but it doesn't help you upload the included stacks' templates to S3.
 
@@ -526,7 +536,7 @@ Properties:
 
 This resource type will upload the template file to S3.  If the template file uses any of the features from this library, it will be processed accordingly.
 
-### Parameters
+#### Parameters
 
 <dl>
 <dt><code>LOCAL_PATH</code></dt>
@@ -539,13 +549,13 @@ This resource type will upload the template file to S3.  If the template file us
 <dd>Parameters to pass to the nested stack (cf. <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-stack-parameters.html" target="_blank">AWS CloudFormation Stack Parameters</a>)</dd>
 </dl>
 
-## Using YAML anchors in templates
+### Using YAML anchors in templates
 
 In a YAML document, you can include the same node in multiple places using <a href="http://yaml.org/spec/1.2/spec.html#id2785586" target="_blank">anchors</a>.  This can be quite useful when you want to reduce the size of a YAML file.
 
 Unfortunately, CloudFormation does not support YAML anchors.  However, when you process a template with this library, all the anchor references will be expanded in the modified template that you send to CloudFormation.  This applies to templates that you pass directly to this library as well as templates that are referenced in an `Aruba::Stack` resource.
 
-## Setting a stack policy
+### Setting a stack policy
 
 You can set a stack's policy by adding the following to the template's `Metadata` section:
 
@@ -553,7 +563,7 @@ You can set a stack's policy by adding the following to the template's `Metadata
 Aruba::StackPolicy: POLICY
 ```
 
-### Parameters
+#### Parameters
 
 <dl>
 <dt><code>POLICY</code></dt>
