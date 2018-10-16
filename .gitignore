@@ -4,3 +4,4 @@ dist
 *.pyo
 .pytest_cache
 .tox
+build
