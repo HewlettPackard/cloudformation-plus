@@ -382,9 +382,7 @@ directory, and nothing else.</dd>
 
 ### Making and updating Lambda functions
 
-CloudFormation can be used to make Lambda functions, but it does not help you stage your code in S3.  Moreover, it is difficult to update Lambda functions with CloudFormation &mdash; changing the code in S3 will not actually change the code that your function runs.
-
-To solve this problem, use the following property in your <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html" target="_blank">`AWS::Lambda::Function`</a> resources:
+CloudFormation Plus can help you keep your Lambda functions up-to-date.  Use the following property in your <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html" target="_blank">`AWS::Lambda::Function`</a> resources:
 
 ```
 Aruba::LambdaCode:
@@ -447,7 +445,7 @@ The property does the following:
 - Makes the stack wait for all the actions to finish running
 - Makes the stack's status conditional on the status of all the actions
 
-*NOTE:* The action programs must be in S3, and this property does not put them there.  You can use the [S3 operations elements](#s3-operations) defined in this library to upload the action programs to S3.
+*IMPORTANT:* The action programs must be in S3, and this property does not put them there.  You can use the [S3 operations elements](#s3-operations) defined in this library to upload the action programs to S3.
 
 *IMPORTANT:* The EC2 instance must be given an instance profile with a role that has permission to read the action programs in S3, and, if `LogUri` is used, it must also have permissions to write to the specified S3 location.
 
@@ -520,10 +518,6 @@ InstProf:
 ```
 
 ### Including nested stacks
-
-With <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-stack.html" target="_blank">the `AWS::CloudFormation::Stack` resource type</a>, CloudFormation lets you include stacks as resources of other stacks, but it doesn't help you upload the included stacks' templates to S3.
-
-Instead, use the `Aruba::Stack` resource type:
 
 ```
 Type: Aruba::Stack
